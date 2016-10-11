@@ -28,9 +28,9 @@ class ApiController extends Controller
 		array(
 			'id' => 0,
 			'name' => "originalName",
-			'extension' => 'ext',
+			// 'extension' => 'ext',
 			'size' => 0,
-			'parent_id' => 0
+			// 'parent_id' => 0
 			)
 		);
 
@@ -226,6 +226,50 @@ class ApiController extends Controller
 		return $this->RESPONSE;
 	}
 
+	public function list_all($key, $folder){
+		$user = User::where("api_key", $key)->first();
+		$this->RESPONSE['data']['folders'] = [];
+		$this->RESPONSE['data']['files'] = [];
+
+		if ($user != null) {
+			$folder = Folder::find($folder);
+
+			if ($folder != null) {
+				$folders = $folder->folders;
+				$files = $folder->files;
+
+				foreach ($folders as $exit) {
+					$this->DIR['folder']['id'] = $exit->id;
+					$this->DIR['folder']['name'] = $exit->name;
+					$this->DIR['folder']['size'] = $exit->size;
+
+					array_push($this->RESPONSE['data']['folders'], $this->DIR);
+				}
+
+				foreach ($files as $file) {
+					$this->FILE['file']['id'] = $file->id;
+					$this->FILE['file']['name'] = $file->originalName;
+					$this->FILE['file']['size'] = $file->size;
+
+					array_push($this->RESPONSE['data']['files'], $this->FILE);
+				}
+
+				$this->RESPONSE['status']['code'] = 200;
+				$this->RESPONSE['status']['message'] = "Folders and Files listed successfully";
+			} else {
+				// WRONG FOLDER ID
+				$this->RESPONSE['status']['code'] = 422;
+				$this->RESPONSE['status']['message'] = "The Folder doesn't exists";
+			}
+		} else {
+			// RESPONSE WRONG API KEY
+			$this->RESPONSE['status']['code'] = 422;
+			$this->RESPONSE['status']['message'] = "You did not provided a valid API key";
+		}
+
+		return $this->RESPONSE;
+	}
+
 	public function add_file($key, $folder, Request $request){
 		$time = strtotime("now");
 		$this->RESPONSE['data']=[];
@@ -264,8 +308,12 @@ class ApiController extends Controller
 										$new->route = $route;
 										$new->size = $size;
 										$new->save();
-										$f->storeAS($folder->route."/".$folder->name, $filename);
+										$f->storeAS($route, $filename);
 										$folder->files()->save($new);
+
+										if (in_array($f->getClientOriginalExtension(), ["jpg","png","jpeg"])) {
+											$this->_compress($new->name, "storage/".$route);
+										}
 
 										$this->FILE['file']['id'] = $new->id;
 										$this->FILE['file']['name'] = $new->originalName;
@@ -297,8 +345,12 @@ class ApiController extends Controller
 									$new->route = $route;
 									$new->size = $size;
 									$new->save();
-									$file->storeAS($folder->route."/".$folder->name, $filename);
+									$file->storeAS($route, $filename);
 									$folder->files()->save($new);
+
+									if (in_array($file->getClientOriginalExtension(), ["jpg","png","jpeg"])) {
+										$this->_compress($new->name, "storage/".$route);
+									}
 
 									$this->FILE['file']['id'] = $new->id;
 									$this->FILE['file']['name'] = $new->originalName;
@@ -351,7 +403,7 @@ class ApiController extends Controller
 		if ($file != null) {
 			$folder = $file->parent;
 
-			if ($this->check_permission($api_key, $folder)) {
+			if ($this->check_permission($key, $folder)) {
 				Storage::delete($file->route."/".$file->name);
 				$file->delete();
 
@@ -385,11 +437,11 @@ class ApiController extends Controller
 				$files = $folder->files;
 
 				foreach ($files as $file) {
-					$this->DIR['folder']['id'] = $file->id;
-					$this->DIR['folder']['name'] = $file->originalName;
-					$this->DIR['folder']['size'] = $file->size;
+					$this->FILE['file']['id'] = $file->id;
+					$this->FILE['file']['name'] = $file->originalName;
+					$this->FILE['file']['size'] = $file->size;
 
-					array_push($this->RESPONSE['data'], $this->DIR);
+					array_push($this->RESPONSE['data'], $this->FILE);
 				}
 
 				$this->RESPONSE['status']['code'] = 200;
@@ -489,6 +541,15 @@ class ApiController extends Controller
 
 	public function test(){
 		return view('add');
+	}
+
+	function _compress($file, $route){
+		\Tinify\setKey("PTXJLwagfKt6l-r-DTnMNPRycYPVJqrY");
+
+		$source = \Tinify\fromFile($route."/".$file);
+		$source->toFile($route."/".$file);
+
+		return true;
 	}
 
 }

@@ -30,7 +30,7 @@
 
 <script type="text/javascript">
 	Dropzone.options.dropzoneForm = ({
-		url: "upload_file/abc/4", //4 admin y 7 admin/test
+		url: "upload_file/abcd/8", //4 admin y 7 admin/test
 		paramName:'random',
 		uploadMultiple: true,
 		dictDefaultMessage: 'Click here...',
