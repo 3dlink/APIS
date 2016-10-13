@@ -54,3 +54,14 @@ Route::get('twitter/callback', [
 	'as'	=>	'twitter.callback']);
 
 Route::post('/twitter/tweet', 'IntegrationController@TWtweet');
+
+
+//Payments
+Route::post('/mercadopago/pay', 'IntegrationController@MP_payment');
+
+Route::post('/paypal/pay', 'IntegrationController@PP_payment');
+
+Route::get('paypal/{value}', [
+	'uses' => 'IntegrationController@PP_confirm',
+	'as'	=>	'back.url'
+]);

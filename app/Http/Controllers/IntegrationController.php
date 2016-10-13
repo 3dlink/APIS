@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -11,6 +10,8 @@ use App\File;
 use SammyK\LaravelFacebookSdk\LaravelFacebookSdk;
 use Twitter;
 use Storage;
+use Paypal;
+use MP;
 
 class IntegrationController extends Controller
 {
@@ -32,12 +33,14 @@ class IntegrationController extends Controller
 		return Redirect($login_url);
 	}
 
-	public function FBcallback(LaravelFacebookSdk $fb){
+	public function FBcallback(LaravelFacebookSdk $fb)
+	{
 		// Obtain an access token.
 		try {
 			$token = $fb->getAccessTokenFromRedirect();
 		} catch (Facebook\Exceptions\FacebookSDKException $e) {
-			dd($e->getMessage());
+			$this->RESPONSE['status']['code'] = 422;
+			$this->RESPONSE['status']['message'] = $e->getMessage();
 		}
 
 		// Access token will be null if the user denied the request
@@ -67,7 +70,8 @@ class IntegrationController extends Controller
 			try {
 				$token = $oauth_client->getLongLivedAccessToken($token);
 			} catch (Facebook\Exceptions\FacebookSDKException $e) {
-				dd($e->getMessage());
+				$this->RESPONSE['status']['code'] = 422;
+				$this->RESPONSE['status']['message'] = $e->getMessage();
 			}
 		}
 
@@ -77,11 +81,14 @@ class IntegrationController extends Controller
 		Session::put('fb_user_access_token', (string) $token);
 
 		// Get basic info on the user from Facebook.
-		// try {
-		// 	$response = $fb->get('/me?fields=id,name,email');
-		// } catch (Facebook\Exceptions\FacebookSDKException $e) {
-		// 	dd($e->getMessage());
-		// }
+		try {
+			$response = $fb->get('/me');
+		} catch (Facebook\Exceptions\FacebookSDKException $e) {
+			$this->RESPONSE['status']['code'] = 422;
+			$this->RESPONSE['status']['message'] = $e->getMessage();
+		}
+
+		// dd($response);
 
 		// Convert the response to a `Facebook/GraphNodes/GraphUser` collection
 		// $facebook_user = $response->getGraphUser();
@@ -117,12 +124,13 @@ class IntegrationController extends Controller
 				exit;
 			}
 
-			$graphNode = $response->getGraphNode();
+			// $graphNode = $response->getGraphNode();
 
-			dd($graphNode);
+			$this->RESPONSE['status']['code'] = 200;
+			$this->RESPONSE['status']['message'] = 'Link posted successfuly!';
 		} else {
 			$this->RESPONSE['status']['code'] = 422;
-			$this->RESPONSE['status']['message'] = 'There was an error obtaining the necessary parameters!';
+			$this->RESPONSE['status']['message'] = 'Missing parameters!';
 		}
 
 		return $this->RESPONSE;
@@ -147,9 +155,10 @@ class IntegrationController extends Controller
 				exit;
 			}
 
-			$graphNode = $response->getGraphNode();
+			// $graphNode = $response->getGraphNode();
 
-			dd($graphNode);
+			$this->RESPONSE['status']['code'] = 200;
+			$this->RESPONSE['status']['message'] = 'Photo posted successfuly!';
 		} else {
 			$this->RESPONSE['status']['code'] = 422;
 			$this->RESPONSE['status']['message'] = 'Missing parameters!';
@@ -181,9 +190,8 @@ class IntegrationController extends Controller
 		return $this->RESPONSE;
 	}
 
-	public function TWcallback(Request $request) {
-		// You should set this route on your Twitter Application settings as the callback
-		// https://apps.twitter.com/app/YOUR-APP-ID/settings
+	public function TWcallback(Request $request) 
+	{
 		if (Session::has('oauth_request_token'))
 		{
 			$request_token = [
@@ -210,6 +218,8 @@ class IntegrationController extends Controller
 
 			$credentials = Twitter::getCredentials();
 
+			// dd($credentials);
+
 			if (is_object($credentials) && !isset($credentials->error))
 			{
 			// $credentials contains the Twitter user object with all the info about the user.
@@ -233,17 +243,172 @@ class IntegrationController extends Controller
 
 	public function TWtweet(Request $request)
 	{
-		if ($request->has('token') && $request->has('message') && $request->has('file')) {
+		$tweet = ['status' => $request->message];
 
-			// $uploaded_media = Twitter::uploadMedia(['media' => Storage::get($image->route."/".$image->name)]);
-			$uploaded_media = Twitter::uploadMedia(['media' => $request->file]);
+		if ($request->has('token') && $request->has('message')) {
 
-			Twitter::postTweet(['status' => $request->message, 'media_ids' =>   $uploaded_media->media_id_string]);
+			if ($request->has('file')) {
+				// $uploaded_media = Twitter::uploadMedia(['media' => Storage::get($image->route."/".$image->name)]);
+
+				$uploaded_media = Twitter::uploadMedia(['media' => $request->file]);
+				$tweet['media_ids'] = $uploaded_media->media_id_string;
+			}	
+
+			Twitter::postTweet($tweet);
+
+			$this->RESPONSE['status']['code'] = 200;
+			$this->RESPONSE['status']['message'] = 'Tweet posted successfuly!';
 		} else {
 			$this->RESPONSE['status']['code'] = 422;
 			$this->RESPONSE['status']['message'] = 'Missing parameters!';
 		}
 
 		return $this->RESPONSE;
+	}
+
+	public function MP_payment(Request $request) 
+	{	
+		// $items = array (
+  //               array (
+  //                   "title" => "Test2",
+  //                   "quantity" => 1,
+  //                   "currency_id" => "VEF",
+  //                   "unit_price" => 100
+  //               )
+  //           );
+
+		// $back_urls = array(
+		// 	"success"=> route('back.url',1),
+		// 	"pending"=> route('back.url',2),
+		// 	"failure"=> route('back.url',3)
+		// 	);
+
+		// $data = array('items' => $items, 'back_urls' => $back_urls, 'client_id' => '7383633796764492', 'client_secret' => 'arR2X20hLztNs6oH6Tq4qwdkllPE3HA2');
+
+		// $request = (object) $data;
+
+		if ($request->has('items') && $request->has('back_urls') && $request->has('client_id') && $request->has('client_secret')) {
+			
+			$mp = new MP ($request->client_id, $request->client_secret);
+
+			$preference_data = array (
+				"items" => $request->items,
+				"back_urls" => $request->back_urls
+				);
+
+			try {
+				$preference = $mp->create_preference($preference_data);
+
+				return redirect()->to($preference['response']['init_point']);
+			} catch (Exception $e){
+				$this->RESPONSE['status']['code'] = 422;
+				$this->RESPONSE['status']['message'] = $e->getMessage();
+			}
+		} else {
+			$this->RESPONSE['status']['code'] = 422;
+			$this->RESPONSE['status']['message'] = 'Missing parameters!';
+		}
+
+		return $this->RESPONSE;
+	}
+
+	public function PP_payment(Request $request)
+	{
+		// $data = array('client_id' => 'AbqAQeQhqAfj7zxygfUa-aNTHVWdCSNcT8dYzDhbPXMxO2dL-YbyLe8zc7oRlhnlHh55I0uDR5pxViVS', 'client_secret' => 'EPwfKlzhQdriYBJN21n-TMGiYw3Uq9aAcFOwzinX9xCysLAgTP89AsQqcfCj0yL5ZUucclpl0ItI5UNK', 'currency' => 'USD', 'total' => 100, 'description' => 'test2', 'back_urls' => array('return' => route('back.url',1), 'cancel' => route('back.url',2)), 'items' => array(
+		// 	array(
+		// 		"name"=> "hat",
+		// 		"description"=> "Brown color hat",
+		// 		"quantity"=> "1",
+		// 		"price"=> "50",
+		// 		"currency"=> "USD"
+		// 		),
+		// 	array(
+		// 		"name"=> "handbag",
+		// 		"description"=> "Black color hand bag",
+		// 		"quantity"=> "1",
+		// 		"price"=> "50",
+		// 		"currency"=> "USD"
+		// 		)));
+
+		// $request = (object) $data;
+		
+
+		if ($request->has('client_id') && $request->has('client_secret') && $request->has('currency') && $request->has('total') && $request->has('description') && $request->has('back_urls')) {
+
+			$_apiContext = PayPal::ApiContext($request->client_id, $request->client_secret);
+
+
+			$_apiContext->setConfig(array(
+				'mode' => 'sandbox',
+				'service.EndPoint' => 'https://api.sandbox.paypal.com',
+				'http.ConnectionTimeOut' => 30
+				));
+
+			$payer = PayPal::Payer();
+			$payer->setPaymentMethod('paypal');
+
+			$items = array();
+			foreach ($request->items as $i) {
+				$i = (object) $i;
+				$item = Paypal::Item();
+				$item->setName($i->name)
+				->setDescription($i->description)
+				->setCurrency($i->currency)
+				->setQuantity($i->quantity)
+				->setPrice($i->price);
+
+				array_push($items, $item);
+			}
+
+			$items_list = PayPal::ItemList();
+			$items_list->setItems($items);
+
+			$amount = PayPal:: Amount();
+			$amount->setCurrency($request->currency);
+			$amount->setTotal($request->total);
+
+			$transaction = PayPal::Transaction();
+			$transaction->setAmount($amount);
+			$transaction->setDescription($request->description);
+
+			$redirectUrls = PayPal:: RedirectUrls();
+			$redirectUrls->setReturnUrl($request->back_urls['return']);
+			$redirectUrls->setCancelUrl($request->back_urls['cancel']);
+
+			$payment = PayPal::Payment();
+			$payment->setIntent('sale');
+			$payment->setPayer($payer);
+			$payment->setRedirectUrls($redirectUrls);
+			$payment->setTransactions(array($transaction));
+
+			$response = $payment->create($_apiContext);
+			$redirectUrl = $response->links[1]->href;
+
+			Session::put('apiContext', $_apiContext);
+
+			return Redirect()->to($redirectUrl);
+		} else {
+			$this->RESPONSE['status']['code'] = 422;
+			$this->RESPONSE['status']['message'] = 'Missing parameters!';
+		}
+		return $this->RESPONSE;
+	}
+
+	public function PP_confirm($value, Request $request)
+	{
+		$id = $request->get('paymentId');
+		$token = $request->get('token');
+		$payer_id = $request->get('PayerID');
+
+		$_apiContext = Session::get('apiContext');
+
+		$payment = PayPal::getById($id, $_apiContext);
+
+		$paymentExecution = PayPal::PaymentExecution();
+
+		$paymentExecution->setPayerId($payer_id);
+		$executePayment = $payment->execute($paymentExecution, $_apiContext);
+
+		dd($executePayment);
 	}
 }

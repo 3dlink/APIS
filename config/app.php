@@ -165,6 +165,8 @@ return [
         Collective\Html\HtmlServiceProvider::class,
         SammyK\LaravelFacebookSdk\LaravelFacebookSdkServiceProvider::class,
         Thujohn\Twitter\TwitterServiceProvider::class,
+        LivePixel\MercadoPago\Providers\MercadoPagoServiceProvider::class,
+        Netshell\Paypal\PaypalServiceProvider::class,
 
         /*
          * Package Service Providers...
@@ -232,6 +234,8 @@ return [
         'Html' => Collective\Html\HtmlFacade::class,
         'Facebook' => SammyK\LaravelFacebookSdk\FacebookFacade::class,
         'Twitter' => Thujohn\Twitter\Facades\Twitter::class,
+        'MP' => LivePixel\MercadoPago\MP::class,
+        'Paypal' => Netshell\Paypal\Facades\Paypal::class,
 
     ],
 
